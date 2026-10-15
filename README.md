@@ -1,67 +1,111 @@
 # Omarchy Agents
 
-An Omarchy bar widget that picks your default coding agent **and** shows its
-usage. It is a fork of Omarchy's built-in `omarchy.agents` widget that adds an
-agent picker on top of the existing usage dashboard.
+A bar widget for [Omarchy](https://github.com/basecamp/omarchy) that puts your
+coding agents one click away: pick the default agent, open or switch to a
+running agent's terminal, and read each subscription's usage — all from a single
+bar icon.
 
-One bar icon, one panel:
+It is a fork of Omarchy's built-in `omarchy.agents` widget. The usage dashboard
+is upstream work; this fork layers an **agent picker and launcher** on top.
 
-- **Agent picker** — a checkbox row per installed agent. **Clicking a row opens
-  that agent**: it focuses the terminal if the agent is already running, or
-  launches it in a new one otherwise (without touching your default). The
-  **checkbox** is what writes the default agent
-  (`~/.config/omarchy/defaults/agent`), so `omarchy-agent` and the agent
-  keybinding follow along. A row shows `open`/`active` when it has a terminal
-  open, and the focused one is highlighted.
-- **Follows the focused terminal** — while the panel is open it auto-selects
-  whichever agent terminal is focused, until you click a row or checkbox by
-  hand. The bar glyph also changes to the focused agent's mark.
-- **Usage dashboard** — rate-limit meters, prepaid balance, tokens by day, and
-  the all-time model breakdown for each subscription (Claude, Codex,
-  Fireworks), unchanged from the upstream widget.
+## Features
+
+- **Agent picker** — one row per installed agent, with its own mark and an
+  `open`/`active` marker when it has a terminal running.
+- **Open or switch in one click** — clicking a row focuses that agent's terminal
+  if it is already open, or launches it in a new one otherwise. Your default
+  agent is never changed by a click.
+- **Default agent** — the checkbox on a row writes your default
+  (`~/.config/omarchy/defaults/agent`), so `omarchy agent` and the agent
+  keybinding follow it.
+- **Follows the focused terminal** — while the panel is open it tracks whichever
+  agent terminal is focused, and the bar glyph becomes that agent's mark.
+- **Usage dashboard** — rate-limit meters with pace, prepaid balance, tokens by
+  day, and the all-time model breakdown for each subscription (Claude, Codex,
+  Fireworks), unchanged from upstream.
 
 ## Requirements
 
-- Omarchy (tested on `4.0.0.alpha`) with the shell running.
-- `bash`, `jq`, `hyprctl` (all present on a stock Omarchy install).
+- Omarchy with the shell running (built against the current alpha).
+- `bash`, `jq`, and `hyprctl` — all present on a stock Omarchy install.
+- At least one coding agent installed (Claude Code, Codex, Copilot, Gemini, …).
+  The picker lists an agent only when its command is on `PATH`, matching what
+  `omarchy-default-agent` treats as an install.
 
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/<you>/omarchy-agents.git --enable
+omarchy plugin add https://github.com/ridgegate/omarchy-agents.git --enable
 ```
 
-This widget declares `omarchy.clonedFrom: omarchy.agents`, so it is treated as a
-drop-in replacement for the built-in agents widget. After enabling it, take the
-built-in off the bar so you don't end up with two agents icons:
+This clones the repo to `~/.config/omarchy/plugins/tomliu.agents`, validates it,
+and adds it to your bar. Since it declares `omarchy.clonedFrom: omarchy.agents`,
+it takes the built-in's place in the bar.
+
+If you end up with two agents icons, remove the built-in one:
 
 ```bash
 omarchy plugin disable omarchy.agents
 ```
 
-If the picker or usage view looks stale after editing the plugin, run
-`omarchy restart shell` (a plain `rescanPlugins` reloads the QML but does not
-always rebuild a bar widget's newly added children).
+### Manual install (plain git)
 
-## How the picker knows what's installed and focused
+```bash
+git clone https://github.com/ridgegate/omarchy-agents.git \
+  ~/.config/omarchy/plugins/tomliu.agents
+omarchy-shell shell rescanPlugins
+omarchy plugin enable tomliu.agents
+```
 
-`agents.sh` (next to `Panel.qml`) does the work:
+The folder name must match the plugin `id` in `manifest.json` (`tomliu.agents`).
+
+### Update
+
+```bash
+omarchy plugin update tomliu.agents
+```
+
+### Uninstall
+
+```bash
+omarchy plugin disable tomliu.agents
+omarchy plugin remove tomliu.agents
+```
+
+After changing the plugin's QML by hand, run `omarchy restart shell` — a plain
+`rescanPlugins` reloads the QML but does not always rebuild a bar widget's newly
+added children.
+
+## Usage
+
+- Bar icon **left click** — open the panel.
+- Bar icon **right click** — open Omarchy's own agent picker (`omarchy-agent --pick`).
+- Bar icon **middle click** — switch to the next subscription.
+- In the panel: click an **agent row** to open or switch to its terminal, click
+  its **checkbox** to make it the default, `h`/`l` to switch subscription,
+  `j`/`k` to scroll, `r`/Enter to refresh, Tab to the neighboring panel, Esc to
+  close.
+- IPC: `omarchy-shell omarchy.agents toggle` (also `open`, `close`, `refresh`).
+
+## How it works
+
+`agents.sh`, bundled next to `Panel.qml`, does the work:
 
 - **Installed** — an agent is offered when its command is on `PATH`, matching
-  what `omarchy-default-agent` treats as an install. The label, glyph, and icon
-  font for each id live in `agents.json`.
+  what `omarchy-default-agent` treats as an install. Each id's label, glyph, and
+  icon font live in `agents.json`.
 - **Default** — read from `~/.config/omarchy/defaults/agent`; `agents.sh set ID`
   writes it.
 - **Open / focused** — `hyprctl clients -j` gives the pid of every
   `org.omarchy.agent` window; the agent is whichever known binary appears in
-  that window's process tree (exe basename, `cmdline` token, or an
+  that window's process tree (exe basename, a `cmdline` token, or an
   `…/installs/<id>/` path, so mise-shimmed agents resolve too). The focused one
   is the active window.
-- **Acting on a row** — clicking a row runs `agents.sh activate ID`, which
-  focuses the agent's window with `hyprctl` if it is open, else launches it.
-  Launching reuses Omarchy's own launcher (so each agent gets its usual flags
-  and the shared `org.omarchy.agent` app-id) by swapping the default in for the
-  moment of the launch and restoring it, so your default never changes.
+- **Clicking a row** — runs `agents.sh activate ID`, which focuses the agent's
+  window if it is open, else launches it. Launching reuses Omarchy's own
+  launcher (so each agent gets its usual flags and the shared
+  `org.omarchy.agent` app-id) by swapping the default in for the moment of the
+  launch and restoring it, so your default never changes.
 
 The widget polls `agents.sh state` every 2 seconds (per bar instance).
 
@@ -69,19 +113,12 @@ The widget polls `agents.sh state` every 2 seconds (per bar instance).
 
 - **Agent** — the picker described above.
 - **Hero** — the mark, the tool, and the plan it runs on ("Max 20x", "Pro").
-- **Subscription switch** — one chip per enabled subscription; appears only when
+- **Subscription switch** — one chip per enabled subscription; shown only when
   more than one is enabled.
 - **Limits** — percentage of each allowance used, a meter, and the reset
   countdown.
 - **Balance** — prepaid subscriptions report a credit ledger instead of limits.
 - **Tokens by day / by model** — the last week, and the all-time model split.
-
-Interactions: bar icon left = panel, right = launch the agent picker
-(`omarchy-agent --pick`), middle = next subscription. In the panel: clicking an
-agent row opens or switches to its terminal, clicking its checkbox makes it the
-default, `h`/`l` switch subscription, `j`/`k` scroll, `r`/Enter refresh, Tab
-moves to the neighboring panel, Esc closes. IPC:
-`omarchy-shell shell toggle tomliu.agents`.
 
 ## Data
 
@@ -115,11 +152,19 @@ omarchy bar set tomliu.agents providers '{
 }' --json
 ```
 
+## The plugin id
+
+The id is `tomliu.agents`, so `omarchy plugin add` installs it to
+`~/.config/omarchy/plugins/tomliu.agents`. The id is just a namespace — it must
+be unique on the machine and outside Omarchy's reserved `omarchy.*` namespace.
+The widget finds its helper relative to its own file, so it keeps working if you
+rename the id and folder together.
+
 ## Credits and license
 
-Forked from the Omarchy built-in `omarchy.agents` widget (the usage dashboard,
-`Main.qml`, `Agent.qml`, and the `assets/` marks are upstream work). The agent
-picker, `agents.sh`, and `agents.json` are additions in this fork.
+Forked from Omarchy's built-in `omarchy.agents` widget — the usage dashboard and
+the `assets/` marks are upstream work by the Omarchy authors. The agent picker,
+`agents.sh`, and `agents.json` are additions in this fork.
 
 MIT — see [LICENSE](LICENSE). Original copyright © David Heinemeier Hansson;
 modifications © Tom Liu.

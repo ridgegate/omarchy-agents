@@ -17,8 +17,7 @@
 set -uo pipefail
 
 self_dir=$(dirname "$(readlink -f "$0")")
-meta_path="$HOME/.config/omarchy/plugins/tomliu.agents/agents.json"
-[[ -f $meta_path ]] || meta_path="$self_dir/agents.json"
+meta_path="$self_dir/agents.json"
 
 # Fallback id list if the metadata file is missing.
 KNOWN_AGENTS=(pi omp opencode claude codex crush grok gemini openclaw hermes copilot muse cursor-agent)

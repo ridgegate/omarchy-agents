@@ -36,8 +36,13 @@ Panel {
   // currently has (or is focused in) an org.omarchy.agent terminal. The usage
   // dashboard below then follows whichever agent is selected.
 
-  readonly property string helperScript:
-    (Quickshell.env("HOME") || "") + "/.config/omarchy/plugins/tomliu.agents/agents.sh"
+  // Resolved next to this file, so the plugin works under any install id or
+  // path — a rename, a fork, or a manual clone — instead of pinning
+  // ~/.config/omarchy/plugins/<id>/agents.sh with a literal id.
+  readonly property string helperScript: {
+    var url = String(Qt.resolvedUrl("agents.sh"))
+    return url.indexOf("file://") === 0 ? url.slice(7) : url
+  }
   property var agentState: ({ "agents": [], "default": "", "focused": "" })
   readonly property var agentRows: agentState.agents || []
   property int agentRevision: 0

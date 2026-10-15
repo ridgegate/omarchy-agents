@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "tomliu.agents",
   "name": "Agents",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Tom Liu",
   "license": "MIT",
   "description": "Pick your default coding agent, follow the agent terminal that is open, and read its usage, limits, and pace in a native Omarchy bar panel.",
