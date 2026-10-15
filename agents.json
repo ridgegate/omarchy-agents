@@ -1,0 +1,80 @@
+[
+  {
+    "id": "claude",
+    "label": "Claude",
+    "icon": "󰛄",
+    "iconFont": ""
+  },
+  {
+    "id": "codex",
+    "label": "Codex",
+    "icon": "",
+    "iconFont": "omarchy"
+  },
+  {
+    "id": "copilot",
+    "label": "Copilot",
+    "icon": "",
+    "iconFont": ""
+  },
+  {
+    "id": "crush",
+    "label": "Crush",
+    "icon": "󰋑",
+    "iconFont": ""
+  },
+  {
+    "id": "cursor-agent",
+    "label": "Cursor CLI",
+    "icon": "",
+    "iconFont": "omarchy"
+  },
+  {
+    "id": "gemini",
+    "label": "Gemini",
+    "icon": "󰫢",
+    "iconFont": ""
+  },
+  {
+    "id": "grok",
+    "label": "Grok",
+    "icon": "",
+    "iconFont": "omarchy"
+  },
+  {
+    "id": "hermes",
+    "label": "Hermes",
+    "icon": "",
+    "iconFont": "omarchy"
+  },
+  {
+    "id": "muse",
+    "label": "Muse Code",
+    "icon": "󰛤",
+    "iconFont": ""
+  },
+  {
+    "id": "omp",
+    "label": "omp",
+    "icon": "",
+    "iconFont": "omarchy"
+  },
+  {
+    "id": "openclaw",
+    "label": "OpenClaw",
+    "icon": "",
+    "iconFont": "omarchy"
+  },
+  {
+    "id": "opencode",
+    "label": "OpenCode",
+    "icon": "",
+    "iconFont": "omarchy"
+  },
+  {
+    "id": "pi",
+    "label": "Pi",
+    "icon": "",
+    "iconFont": "omarchy"
+  }
+]
