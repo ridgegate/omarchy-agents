@@ -7,6 +7,9 @@
 #   agents.sh list    -> just the JSON array of agents (a slice of state)
 #   agents.sh active  -> just {focused, open}
 #   agents.sh set ID  -> write ID to ~/.config/omarchy/defaults/agent
+#   agents.sh focus ID   -> focus ID's terminal if it is open (fails if not)
+#   agents.sh launch ID  -> open ID in a new Omarchy agent terminal
+#   agents.sh activate ID -> focus ID's terminal if open, else launch it
 #
 # The per-agent metadata (label, icon glyph, icon font) lives in agents.json
 # beside this script. Everything else is derived.
@@ -19,6 +22,9 @@ meta_path="$HOME/.config/omarchy/plugins/tomliu.agents/agents.json"
 
 # Fallback id list if the metadata file is missing.
 KNOWN_AGENTS=(pi omp opencode claude codex crush grok gemini openclaw hermes copilot muse cursor-agent)
+
+# id -> Hyprland window address for agents that currently have a terminal open.
+declare -A ID_ADDR=()
 
 if [[ -f $meta_path ]]; then
   meta=$(cat "$meta_path")
@@ -85,10 +91,11 @@ resolve_agent() {
   return 1
 }
 
-# Populates OPEN_IDS and FOCUSED.
+# Populates OPEN_IDS, FOCUSED, and ID_ADDR.
 scan_active() {
   OPEN_IDS=()
   FOCUSED=""
+  ID_ADDR=()
   local json active_addr addr pid id
   json=$(hyprctl clients -j 2>/dev/null) || json="[]"
   active_addr=$(hyprctl activewindow -j 2>/dev/null | jq -r '.address // empty' 2>/dev/null)
@@ -98,8 +105,51 @@ scan_active() {
     id=$(resolve_agent "$pid" 2>/dev/null) || continue
     [[ -n $id ]] || continue
     OPEN_IDS+=("$id")
-    [[ -n $active_addr && $addr == "$active_addr" ]] && FOCUSED="$id"
+    if [[ -n $active_addr && $addr == "$active_addr" ]]; then
+      # The focused window wins, but keep a real address recorded.
+      FOCUSED="$id"
+      ID_ADDR[$id]="$addr"
+    else
+      # First window seen for this agent, unless the focused one already set it.
+      [[ -n ${ID_ADDR[$id]:-} ]] || ID_ADDR[$id]="$addr"
+    fi
   done < <(jq -r '.[] | select(.class == "org.omarchy.agent") | [.address, (.pid|tostring)] | @tsv' <<<"$json" 2>/dev/null)
+}
+
+# Focus the terminal of an already-open agent by its window address.
+focus_agent() {
+  local id=$1 addr
+  scan_active
+  addr=${ID_ADDR[$id]:-}
+  [[ -n $addr ]] || return 1
+  # Hyprland 0.56+ (Lua config) parses dispatch as Lua, so the classic
+  # `focuswindow address:...` string is rejected. Newer first, older fallback.
+  if hyprctl eval "hl.dispatch(hl.dsp.focus{window=\"address:$addr\"})" >/dev/null 2>&1; then
+    return 0
+  fi
+  hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
+}
+
+# Launch an agent in a new Omarchy agent terminal.
+#
+# Omarchy only launches the *default* agent: `omarchy-agent` reads
+# ~/.config/omarchy/defaults/agent and then execs the matching command (each
+# agent has its own flags, e.g. `gemini --yolo`). To honour "clicking an agent
+# should not change my default", borrow that launcher without leaving the
+# default changed: swap the file in, launch, restore. omarchy-agent reads the
+# file immediately, long before it blocks on the terminal, so we detach it and
+# restore after a short settle rather than waiting on it.
+launch_agent() {
+  local id=$1 f prev
+  [[ -n $id ]] || { echo "launch needs an agent id" >&2; exit 1; }
+  is_installed "$id" || { echo "$id is not installed" >&2; exit 1; }
+  f="$HOME/.config/omarchy/defaults/agent"
+  prev=$(head -n1 "$f" 2>/dev/null | tr -d '[:space:]')
+  mkdir -p "$(dirname "$f")"
+  printf '%s\n' "$id" >"$f"
+  setsid bash -c 'cd "$HOME" && exec omarchy-agent' >/dev/null 2>&1 </dev/null &
+  sleep 0.6
+  if [[ -n $prev ]]; then printf '%s\n' "$prev" >"$f"; else rm -f "$f"; fi
 }
 
 build_state() {
@@ -159,8 +209,25 @@ set)
   mkdir -p "$HOME/.config/omarchy/defaults"
   printf '%s\n' "$id" >"$HOME/.config/omarchy/defaults/agent"
   ;;
+focus)
+  shift
+  id=${1:-}
+  [[ -n $id ]] || { echo "focus needs an agent id" >&2; exit 1; }
+  focus_agent "$id" || { echo "$id is not open" >&2; exit 1; }
+  ;;
+launch)
+  shift
+  launch_agent "${1:-}"
+  ;;
+activate)
+  shift
+  id=${1:-}
+  [[ -n $id ]] || { echo "activate needs an agent id" >&2; exit 1; }
+  # Open or switch: focus the existing terminal, otherwise start one.
+  focus_agent "$id" || launch_agent "$id"
+  ;;
 *)
-  echo "usage: agents.sh <state|list|active|set ID>" >&2
+  echo "usage: agents.sh <state|list|active|set ID|focus ID|launch ID|activate ID>" >&2
   exit 1
   ;;
 esac

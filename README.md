@@ -6,14 +6,16 @@ agent picker on top of the existing usage dashboard.
 
 One bar icon, one panel:
 
-- **Agent picker** — a checkbox row per installed agent. Checked is the system
-  default agent; picking a row both focuses that agent's usage view and writes
-  it as the default (`~/.config/omarchy/defaults/agent`), so `omarchy-agent`
-  and the agent keybinding follow along. A row shows `open`/`active` when it
-  has a terminal open, and the focused one is highlighted.
+- **Agent picker** — a checkbox row per installed agent. **Clicking a row opens
+  that agent**: it focuses the terminal if the agent is already running, or
+  launches it in a new one otherwise (without touching your default). The
+  **checkbox** is what writes the default agent
+  (`~/.config/omarchy/defaults/agent`), so `omarchy-agent` and the agent
+  keybinding follow along. A row shows `open`/`active` when it has a terminal
+  open, and the focused one is highlighted.
 - **Follows the focused terminal** — while the panel is open it auto-selects
-  whichever agent terminal is focused, until you pick a row by hand. The bar
-  glyph also changes to the focused agent's mark.
+  whichever agent terminal is focused, until you click a row or checkbox by
+  hand. The bar glyph also changes to the focused agent's mark.
 - **Usage dashboard** — rate-limit meters, prepaid balance, tokens by day, and
   the all-time model breakdown for each subscription (Claude, Codex,
   Fireworks), unchanged from the upstream widget.
@@ -55,6 +57,11 @@ always rebuild a bar widget's newly added children).
   that window's process tree (exe basename, `cmdline` token, or an
   `…/installs/<id>/` path, so mise-shimmed agents resolve too). The focused one
   is the active window.
+- **Acting on a row** — clicking a row runs `agents.sh activate ID`, which
+  focuses the agent's window with `hyprctl` if it is open, else launches it.
+  Launching reuses Omarchy's own launcher (so each agent gets its usual flags
+  and the shared `org.omarchy.agent` app-id) by swapping the default in for the
+  moment of the launch and restoring it, so your default never changes.
 
 The widget polls `agents.sh state` every 2 seconds (per bar instance).
 
@@ -70,9 +77,11 @@ The widget polls `agents.sh state` every 2 seconds (per bar instance).
 - **Tokens by day / by model** — the last week, and the all-time model split.
 
 Interactions: bar icon left = panel, right = launch the agent picker
-(`omarchy-agent --pick`), middle = next subscription. In the panel: `h`/`l`
-switch subscription, `j`/`k` scroll, `r`/Enter refresh, Tab moves to the
-neighboring panel, Esc closes. IPC: `omarchy-shell shell toggle tomliu.agents`.
+(`omarchy-agent --pick`), middle = next subscription. In the panel: clicking an
+agent row opens or switches to its terminal, clicking its checkbox makes it the
+default, `h`/`l` switch subscription, `j`/`k` scroll, `r`/Enter refresh, Tab
+moves to the neighboring panel, Esc closes. IPC:
+`omarchy-shell shell toggle tomliu.agents`.
 
 ## Data
 

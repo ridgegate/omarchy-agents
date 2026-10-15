@@ -116,9 +116,9 @@ Panel {
 
   // ------------------------------------------------------------ agent pick
   //
-  // Picking a row does both things the panel promises: it focuses that agent's
-  // usage view and writes it as Omarchy's default agent, so `omarchy agent` and
-  // the agent keybinding follow along.
+  // Clicking a row opens or switches to that agent's terminal and moves the
+  // usage view onto it; the checkbox is the separate control that writes the
+  // default agent, so `omarchy agent` and the keybinding follow along.
 
   function selectAgent(id) {
     if (id === "") return
@@ -133,9 +133,15 @@ Panel {
     if (p) selectedProviderId = p.providerId
   }
 
-  function pickAgent(id) {
+  // A row click goes to the agent: focus its terminal if one is already open,
+  // otherwise launch it in a new terminal. It also moves the usage view onto
+  // that agent, but it deliberately leaves the *default* agent alone — the
+  // checkbox is how you change which agent `omarchy agent` starts.
+  function activateAgent(id) {
+    if (id === "") return
     selectAgent(id)
-    setDefaultAgent(id)
+    actionProc.command = [root.helperScript, "activate", id]
+    if (!actionProc.running) actionProc.running = true
   }
 
   function setDefaultAgent(id) {
@@ -469,6 +475,17 @@ Panel {
     }
   }
 
+  // focus/launch a specific agent when its row is clicked. Launches detach and
+  // settle for under a second, so the next poll reflects the new window.
+  Process {
+    id: actionProc
+    running: false
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: if (text.trim() !== "") console.warn("agents/action", text.trim())
+    }
+  }
+
   Timer {
     interval: 2000
     running: true
@@ -587,7 +604,8 @@ Panel {
                   width: agentSection.width
                   agent: modelData
                   selected: modelData.id === root.selectedAgentId
-                  onPicked: root.pickAgent(modelData.id)
+                  onPicked: root.activateAgent(modelData.id)
+                  onDefaultPicked: root.setDefaultAgent(modelData.id)
                 }
               }
             }
@@ -922,8 +940,9 @@ Panel {
     }
   }
 
-  // One picker row: a checkbox for the default agent, the agent's own mark,
-  // its name, and a marker when its terminal is open (filled for focused).
+  // One picker row: a checkbox that sets the default agent, the agent's own
+  // mark, its name, and a marker when its terminal is open (filled for focused).
+  // Clicking the row itself opens or switches to the agent, not the checkbox.
   component AgentRow: Item {
     id: agentRow
     property var agent: null
@@ -939,6 +958,7 @@ Panel {
       agent && String(agent.iconFont || "").length > 0 ? String(agent.iconFont) : root.fontFamily
 
     signal picked()
+    signal defaultPicked()
 
     implicitHeight: Math.max(rowMark.implicitHeight, rowLabel.implicitHeight, checkBox.height)
       + Style.spacing.sm * 2
@@ -1045,6 +1065,19 @@ Panel {
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: agentRow.picked()
+    }
+
+    // The checkbox is its own target, stacked above the row's MouseArea so a
+    // click on it sets the default instead of opening or switching the agent.
+    MouseArea {
+      anchors.left: parent.left
+      anchors.leftMargin: Style.space(4)
+      anchors.verticalCenter: parent.verticalCenter
+      width: checkBox.width + Style.space(12)
+      height: parent.height
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: agentRow.defaultPicked()
     }
   }
 
