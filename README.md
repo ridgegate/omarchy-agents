@@ -38,7 +38,7 @@ is upstream work; this fork layers an **agent picker and launcher** on top.
 omarchy plugin add https://github.com/ridgegate/omarchy-agents.git --enable
 ```
 
-This clones the repo to `~/.config/omarchy/plugins/tomliu.agents`, validates it,
+This clones the repo to `~/.config/omarchy/plugins/agentselector.agents`, validates it,
 and adds it to your bar. Since it declares `omarchy.clonedFrom: omarchy.agents`,
 it takes the built-in's place in the bar.
 
@@ -52,24 +52,24 @@ omarchy plugin disable omarchy.agents
 
 ```bash
 git clone https://github.com/ridgegate/omarchy-agents.git \
-  ~/.config/omarchy/plugins/tomliu.agents
+  ~/.config/omarchy/plugins/agentselector.agents
 omarchy-shell shell rescanPlugins
-omarchy plugin enable tomliu.agents
+omarchy plugin enable agentselector.agents
 ```
 
-The folder name must match the plugin `id` in `manifest.json` (`tomliu.agents`).
+The folder name must match the plugin `id` in `manifest.json` (`agentselector.agents`).
 
 ### Update
 
 ```bash
-omarchy plugin update tomliu.agents
+omarchy plugin update agentselector.agents
 ```
 
 ### Uninstall
 
 ```bash
-omarchy plugin disable tomliu.agents
-omarchy plugin remove tomliu.agents
+omarchy plugin disable agentselector.agents
+omarchy plugin remove agentselector.agents
 ```
 
 After changing the plugin's QML by hand, run `omarchy restart shell` — a plain
@@ -131,7 +131,7 @@ the directory. Adding a subscription never touches this plugin — see the
 ## Settings
 
 Settings live in the widget's entry in `~/.config/omarchy/shell.json`, set with
-`omarchy bar set tomliu.agents <key> <value>`:
+`omarchy bar set agentselector.agents <key> <value>`:
 
 | Key | Default | What it does |
 |---|---|---|
@@ -145,7 +145,7 @@ Per-subscription enablement is nested; pass the whole `providers` object as
 JSON:
 
 ```bash
-omarchy bar set tomliu.agents providers '{
+omarchy bar set agentselector.agents providers '{
   "claude": { "enabled": true },
   "codex":  { "enabled": false },
   "fireworks": { "enabled": true }
@@ -154,8 +154,8 @@ omarchy bar set tomliu.agents providers '{
 
 ## The plugin id
 
-The id is `tomliu.agents`, so `omarchy plugin add` installs it to
-`~/.config/omarchy/plugins/tomliu.agents`. The id is just a namespace — it must
+The id is `agentselector.agents`, so `omarchy plugin add` installs it to
+`~/.config/omarchy/plugins/agentselector.agents`. The id is just a namespace — it must
 be unique on the machine and outside Omarchy's reserved `omarchy.*` namespace.
 The widget finds its helper relative to its own file, so it keeps working if you
 rename the id and folder together.
