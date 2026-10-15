@@ -167,4 +167,4 @@ the `assets/` marks are upstream work by the Omarchy authors. The agent picker,
 `agents.sh`, and `agents.json` are additions in this fork.
 
 MIT — see [LICENSE](LICENSE). Original copyright © David Heinemeier Hansson;
-modifications © Tom Liu.
+modifications © ridgegate.

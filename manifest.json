@@ -3,7 +3,7 @@
   "id": "agentselector.agents",
   "name": "Agents",
   "version": "1.2.0",
-  "author": "Tom Liu",
+  "author": "ridgegate",
   "license": "MIT",
   "description": "Pick your default coding agent, follow the agent terminal that is open, and read its usage, limits, and pace in a native Omarchy bar panel.",
   "kinds": [
