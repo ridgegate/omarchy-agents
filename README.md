@@ -110,7 +110,9 @@ added children.
   window if it is open, else launches it. Launching reuses Omarchy's own
   launcher (so each agent gets its usual flags and the shared
   `org.omarchy.agent` app-id) by swapping the default in for the moment of the
-  launch and restoring it, so your default never changes.
+  launch and restoring it, so your default never changes. Agents Omarchy does
+  not know how to start — Antigravity (`agy`) today — get their command in
+  `agents.sh` and are launched straight into an `org.omarchy.agent` terminal.
 
 The widget polls `agents.sh state` every 2 seconds (per bar instance).
 

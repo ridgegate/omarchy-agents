@@ -20,7 +20,7 @@ self_dir=$(dirname "$(readlink -f "$0")")
 meta_path="$self_dir/agents.json"
 
 # Fallback id list if the metadata file is missing.
-KNOWN_AGENTS=(pi omp opencode claude codex crush grok gemini openclaw hermes copilot muse cursor-agent)
+KNOWN_AGENTS=(pi omp opencode claude codex crush grok gemini agy openclaw hermes copilot muse cursor-agent)
 
 # id -> Hyprland window address for agents that currently have a terminal open.
 declare -A ID_ADDR=()
@@ -163,6 +163,22 @@ launch_agent() {
   local id=$1 f prev
   [[ -n $id ]] || { echo "launch needs an agent id" >&2; exit 1; }
   is_installed "$id" || { echo "$id is not installed" >&2; exit 1; }
+
+  # Agents Omarchy's own launcher does not know how to start are launched
+  # directly in an agent terminal, with the same unattended flag the Omarchy
+  # ones use. Startup flags for these live here.
+  local -a direct=()
+  case $id in
+  agy) direct=(agy --dangerously-skip-permissions) ;;
+  esac
+  if ((${#direct[@]})); then
+    local dir="$HOME"
+    [[ -d $HOME/Work ]] && dir="$HOME/Work"
+    setsid bash -c 'cd "$1" && shift && exec omarchy-launch-tui --app-id=org.omarchy.agent "$@"' \
+      _ "$dir" "${direct[@]}" >/dev/null 2>&1 </dev/null &
+    return 0
+  fi
+
   f="$HOME/.config/omarchy/defaults/agent"
   prev=$(head -n1 "$f" 2>/dev/null | tr -d '[:space:]')
   mkdir -p "$(dirname "$f")"
