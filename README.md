@@ -28,9 +28,10 @@ is upstream work; this fork layers an **agent picker and launcher** on top.
 
 - Omarchy with the shell running (built against the current alpha).
 - `bash`, `jq`, and `hyprctl` — all present on a stock Omarchy install.
-- At least one coding agent installed (Claude Code, Codex, Copilot, Gemini, …).
-  The picker lists an agent only when its command is on `PATH`, matching what
-  `omarchy-default-agent` treats as an install.
+- At least one coding agent installed (Claude Code, Codex, Copilot, Antigravity, …).
+  The picker lists only agents Omarchy treats as installed — a real install at
+  `~/.local/bin/<id>`, or a package actually present in `mise` — so a stray
+  `~/.local/bin` mise wrapper for an agent you never installed does not appear.
 
 ## Install
 
@@ -91,9 +92,13 @@ added children.
 
 `agents.sh`, bundled next to `Panel.qml`, does the work:
 
-- **Installed** — an agent is offered when its command is on `PATH`, matching
-  what `omarchy-default-agent` treats as an install. Each id's label, glyph, and
-  icon font live in `agents.json`.
+- **Installed** — an agent is offered only when Omarchy would treat it as
+  installed: a real install at `~/.local/bin/<id>` (a symlink, or a script
+  Omarchy did not write), or a package that is actually in `mise`. The
+  `~/.local/bin` mise wrapper Omarchy writes for each agent is ignored unless
+  its package is really installed, so agents that are merely declared — or were
+  uninstalled — do not appear. Each id's label, glyph, and icon font live in
+  `agents.json`.
 - **Default** — read from `~/.config/omarchy/defaults/agent`; `agents.sh set ID`
   writes it.
 - **Open / focused** — `hyprctl clients -j` gives the pid of every

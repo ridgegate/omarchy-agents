@@ -40,10 +40,31 @@ default_agent() {
   [[ -f $f ]] && head -n1 "$f" 2>/dev/null | tr -d '[:space:]'
 }
 
-# command -v is the same PATH the omarchy wrappers use (mise shims and
-# ~/.local/bin included), so it agrees with what omarchy-default-agent treats
-# as an install.
-is_installed() { command -v "$1" >/dev/null 2>&1; }
+# An agent counts as installed the way Omarchy's own agent setup does: a real
+# install at ~/.local/bin/<id> (a symlink or a script Omarchy did not write), or
+# a tool that is actually installed in mise. The ~/.local/bin/<id> mise wrapper
+# exists for every agent Omarchy has ever set as default — it installs on first
+# run — so its mere presence proves nothing. For those, ask mise whether the
+# package the wrapper would run is really installed.
+is_installed() {
+  local id=$1 f="$HOME/.local/bin/$id" line pkg
+  if [[ -e $f ]]; then
+    if [[ -L $f ]] || ! grep -q '^mise use -g' "$f" 2>/dev/null; then
+      return 0
+    fi
+    while IFS= read -r line; do
+      [[ $line == 'exec mise x '* ]] || continue
+      pkg=${line#exec mise x }
+      pkg=${pkg%% -- *}
+      pkg=${pkg#\"}
+      pkg=${pkg%\"}
+      break
+    done <"$f"
+    if [[ -n $pkg ]] && mise where "$pkg" >/dev/null 2>&1; then return 0; fi
+    return 1
+  fi
+  command -v "$id" >/dev/null 2>&1
+}
 
 # --- active terminal resolution -------------------------------------------
 #
@@ -160,11 +181,6 @@ build_state() {
   while IFS= read -r id; do
     [[ -n $id ]] && is_installed "$id" && installed+=("$id")
   done < <(jq -r '.[].id' <<<"$meta")
-
-  # Nothing installed: keep every known agent so the picker still has rows.
-  if ((${#installed[@]} == 0)); then
-    while IFS= read -r id; do [[ -n $id ]] && installed+=("$id"); done < <(jq -r '.[].id' <<<"$meta")
-  fi
   installed_json=$(json_list "${installed[@]}")
 
   scan_active
