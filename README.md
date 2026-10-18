@@ -1,9 +1,9 @@
 # Omarchy Agents
 
 A bar widget for [Omarchy](https://github.com/basecamp/omarchy) that puts your
-coding agents one click away: pick the default agent, open or switch to a
-running agent's terminal, and read each subscription's usage — all from a single
-bar icon.
+coding agents one click or one keystroke away: open or switch to any installed
+agent, give each one its own keyboard shortcut, pick the default agent, and read
+each subscription's usage — all from a single bar icon.
 
 It is a fork of Omarchy's built-in `omarchy.agents` widget. The usage dashboard
 is upstream work; this fork layers an **agent picker and launcher** on top.
@@ -15,6 +15,13 @@ is upstream work; this fork layers an **agent picker and launcher** on top.
 - **Open or switch in one click** — clicking a row focuses that agent's terminal
   if it is already open, or launches it in a new one otherwise. Your default
   agent is never changed by a click.
+- **Keyboard shortcuts** — give any installed agent a global shortcut from the
+  panel: click the chip at the right of its row (or press `s`), press the combo,
+  and Enter. The panel warns when the combo is already bound and takes it over
+  from the existing binding. A shortcut opens or switches to the agent exactly
+  like a row click.
+- **Starts where you work** — a new agent terminal opens in the focused
+  terminal's directory (or `~/Work` when that is `$HOME`).
 - **Default agent** — the checkbox on a row writes your default
   (`~/.config/omarchy/defaults/agent`), so `omarchy agent` and the agent
   keybinding follow it.
@@ -28,7 +35,7 @@ is upstream work; this fork layers an **agent picker and launcher** on top.
 
 - Omarchy with the shell running (built against the current alpha).
 - `bash`, `jq`, and `hyprctl` — all present on a stock Omarchy install.
-- At least one coding agent installed (Claude Code, Codex, Copilot, Antigravity, …).
+- At least one coding agent installed (Claude Code, Codex, Copilot, Gemini, Antigravity, …).
   The picker lists only agents Omarchy treats as installed — a real install at
   `~/.local/bin/<id>`, or a package actually present in `mise` — so a stray
   `~/.local/bin` mise wrapper for an agent you never installed does not appear.
@@ -68,7 +75,13 @@ omarchy plugin update agentselector.agents
 
 ### Uninstall
 
+Clear any agent shortcuts first so their keys are released:
+
 ```bash
+p=~/.config/omarchy/plugins/agentselector.agents
+for id in $(jq -r 'keys[]' ~/.config/omarchy/agent-shortcuts.json 2>/dev/null); do
+  "$p/agents.sh" shortcut clear "$id"
+done
 omarchy plugin disable agentselector.agents
 omarchy plugin remove agentselector.agents
 ```
@@ -83,7 +96,8 @@ added children.
 - Bar icon **right click** — open Omarchy's own agent picker (`omarchy-agent --pick`).
 - Bar icon **middle click** — switch to the next subscription.
 - In the panel: click an **agent row** to open or switch to its terminal, click
-  its **checkbox** to make it the default, `h`/`l` to switch subscription,
+  its **checkbox** to make it the default, click its **shortcut chip** (or `s` on
+  the selected row) to assign a keyboard shortcut, `h`/`l` to switch subscription,
   `j`/`k` to scroll, `r`/Enter to refresh, Tab to the neighboring panel, Esc to
   close.
 - IPC: `omarchy-shell omarchy.agents toggle` (also `open`, `close`, `refresh`).
@@ -116,9 +130,37 @@ added children.
 
 The widget polls `agents.sh state` every 2 seconds (per bar instance).
 
+## Keyboard shortcuts
+
+Shortcuts are stored in `~/.config/omarchy/agent-shortcuts.json`
+(`{"claude": "SUPER + SHIFT + A"}`) and compiled into
+`~/.config/hypr/agent-shortcuts.lua`, where each one runs
+`agents.sh activate <id>`. The first time you save a shortcut, the widget
+appends `require("hypr.agent-shortcuts")` to the end of
+`~/.config/hypr/bindings.lua`, so agent shortcuts win over earlier bindings on
+the same keys. Each combo is unbound before it is bound, which is how it takes
+over an Omarchy default.
+
+In the editor, hold the modifiers and press a key, or toggle the Super / Shift /
+Ctrl / Alt chips and press just the key. A combo needs Super, Ctrl, or Alt (a
+function key may stand alone). Enter saves, Esc cancels, **Remove** drops the
+shortcut. A combo belongs to one agent at a time.
+
+The same thing from a terminal:
+
+```bash
+agents.sh shortcut set codex "SUPER + ALT + C"
+agents.sh shortcut clear codex
+agents.sh shortcut apply    # rebuild the Lua module and reload Hyprland
+```
+
+To remove the plugin cleanly, clear its shortcuts first (or delete the
+`require("hypr.agent-shortcuts")` line from `bindings.lua`).
+
 ## Panel
 
-- **Agent** — the picker described above.
+- **Agent** — the picker described above, with each agent's shortcut.
+- **Shortcut** — the shortcut editor, shown under the picker while it is open.
 - **Hero** — the mark, the tool, and the plan it runs on ("Max 20x", "Pro").
 - **Subscription switch** — one chip per enabled subscription; shown only when
   more than one is enabled.
@@ -171,7 +213,7 @@ rename the id and folder together.
 
 Forked from Omarchy's built-in `omarchy.agents` widget — the usage dashboard and
 the `assets/` marks are upstream work by the Omarchy authors. The agent picker,
-`agents.sh`, and `agents.json` are additions in this fork.
+keyboard shortcuts, `agents.sh`, and `agents.json` are additions in this fork.
 
 MIT — see [LICENSE](LICENSE). Original copyright © David Heinemeier Hansson;
 modifications © ridgegate.

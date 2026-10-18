@@ -1,5 +1,11 @@
 [
   {
+    "id": "agy",
+    "label": "Antigravity",
+    "icon": "󰫢",
+    "iconFont": ""
+  },
+  {
     "id": "claude",
     "label": "Claude",
     "icon": "󰛄",
@@ -30,9 +36,9 @@
     "iconFont": "omarchy"
   },
   {
-    "id": "agy",
-    "label": "Antigravity",
-    "icon": "󰫢",
+    "id": "gemini",
+    "label": "Gemini",
+    "icon": "󰊭",
     "iconFont": ""
   },
   {

@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "agentselector.agents",
   "name": "Agents",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "ridgegate",
   "license": "MIT",
-  "description": "Pick your default coding agent, follow the agent terminal that is open, and read its usage, limits, and pace in a native Omarchy bar panel.",
+  "description": "Launch installed coding agents with a click or a keyboard shortcut, and read their usage, limits, and pace in a native Omarchy bar panel.",
   "kinds": [
     "bar-widget"
   ],
@@ -15,11 +15,12 @@
   },
   "barWidget": {
     "displayName": "Agents",
-    "description": "One bar icon and one panel: switch the default agent, see which agent terminal is focused, and read rate-limit meters, today, the last week, and the all-time model breakdown for each subscription.",
+    "description": "One bar icon and one panel: launch or switch to any installed agent, give each one a keyboard shortcut, pick the default agent, and read rate-limit meters, the last week, and the all-time model breakdown for each subscription.",
     "category": "AI",
     "aliases": [
       "agents",
-      "model-usage"
+      "model-usage",
+      "agent-menu"
     ],
     "allowMultiple": false,
     "defaults": {

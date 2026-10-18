@@ -56,6 +56,33 @@ Panel {
   // choice until the panel is reopened.
   property bool manualPick: false
   property string lastFollowedAgent: ""
+  // The raw state text, so an identical poll does not rebuild every row.
+  property string lastAgentStateText: ""
+
+  // ------------------------------------------------------------- shortcuts
+  //
+  // One agent at a time can be in the shortcut editor. Modifiers come from
+  // the keys held while recording or from the chips, so a combo Hyprland
+  // already swallows (it never reaches the panel) can still be entered by
+  // toggling its modifiers and pressing the bare key.
+  property string editingAgentId: ""
+  property bool modSuper: false
+  property bool modShift: false
+  property bool modCtrl: false
+  property bool modAlt: false
+  property string recordedKey: ""
+  property string shortcutError: ""
+  property bool shortcutBusy: false
+  property var hyprBinds: []
+
+  readonly property var editingAgentRow: {
+    for (var i = 0; i < agentRows.length; i++)
+      if (agentRows[i].id === editingAgentId) return agentRows[i]
+    return null
+  }
+  readonly property string pendingCombo: comboString(modSuper, modShift, modCtrl, modAlt, recordedKey)
+  readonly property string pendingProblem: comboProblem()
+  readonly property string pendingConflict: comboConflict(pendingCombo)
 
   readonly property var focusedAgentRow: {
     for (var i = 0; i < agentRows.length; i++)
@@ -162,9 +189,11 @@ Panel {
   }
 
   function applyAgentState(text) {
+    if (String(text) === lastAgentStateText) { maybeFollowFocused(); return }
     var parsed
     try { parsed = JSON.parse(String(text || "")) } catch (e) { return }
     if (!parsed || !parsed.agents) return
+    lastAgentStateText = String(text)
     agentState = parsed
     agentRevision++
     defaultAgentId = String(parsed.default || "")
@@ -193,6 +222,178 @@ Panel {
     if (id === "" || id === lastFollowedAgent) return
     lastFollowedAgent = id
     if (root.opened && !manualPick) focusAgent(id)
+  }
+
+  function startShortcutEdit(id) {
+    if (id === "") return
+    var current = ""
+    for (var i = 0; i < agentRows.length; i++)
+      if (agentRows[i].id === id) current = String(agentRows[i].shortcut || "")
+    editingAgentId = id
+    selectAgent(id)
+    loadCombo(current)
+    shortcutError = ""
+    if (!bindsProc.running) bindsProc.running = true
+    Qt.callLater(function() { recorder.forceActiveFocus() })
+  }
+
+  function endShortcutEdit() {
+    editingAgentId = ""
+    shortcutError = ""
+    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  function loadCombo(combo) {
+    var parts = String(combo || "").split("+").map(function(p) { return p.trim().toUpperCase() })
+    modSuper = parts.indexOf("SUPER") >= 0
+    modShift = parts.indexOf("SHIFT") >= 0
+    modCtrl = parts.indexOf("CTRL") >= 0
+    modAlt = parts.indexOf("ALT") >= 0
+    var last = parts.length > 0 ? parts[parts.length - 1] : ""
+    recordedKey = ["", "SUPER", "SHIFT", "CTRL", "ALT"].indexOf(last) >= 0 ? "" : last
+  }
+
+  function comboString(sup, shift, ctrl, alt, key) {
+    if (key === "") return ""
+    var parts = []
+    if (sup) parts.push("SUPER")
+    if (shift) parts.push("SHIFT")
+    if (ctrl) parts.push("CTRL")
+    if (alt) parts.push("ALT")
+    parts.push(key)
+    return parts.join(" + ")
+  }
+
+  // "SUPER + SHIFT + A" reads as "Super+Shift+A" on a row.
+  function prettyCombo(combo) {
+    if (String(combo || "") === "") return ""
+    return String(combo).split("+").map(function(p) {
+      p = p.trim()
+      return p.length > 1 && !/^F\d+$/.test(p) ? p.charAt(0) + p.slice(1).toLowerCase() : p
+    }).join("+")
+  }
+
+  // A bare letter would steal it from every text field, so a combo needs a
+  // modifier unless its key is a function key.
+  function comboProblem() {
+    if (recordedKey === "") return ""
+    if (!modSuper && !modShift && !modCtrl && !modAlt && !/^F\d+$/.test(recordedKey))
+      return "Add a modifier (Super, Ctrl, or Alt) so the key still types normally."
+    if (!modSuper && !modCtrl && !modAlt)
+      return "Shift alone still types the key. Add Super, Ctrl, or Alt."
+    return ""
+  }
+
+  function comboMask(combo) {
+    var parts = String(combo).split("+").map(function(p) { return p.trim().toUpperCase() })
+    var mask = 0
+    if (parts.indexOf("SHIFT") >= 0) mask |= 1
+    if (parts.indexOf("CTRL") >= 0) mask |= 4
+    if (parts.indexOf("ALT") >= 0) mask |= 8
+    if (parts.indexOf("SUPER") >= 0) mask |= 64
+    return mask
+  }
+
+  // What the combo is bound to right now, other than this agent itself.
+  function comboConflict(combo) {
+    if (combo === "" || editingAgentId === "") return ""
+    var parts = combo.split("+")
+    var key = parts[parts.length - 1].trim().toUpperCase()
+    var mask = comboMask(combo)
+    var own = (editingAgentRow ? editingAgentRow.label : editingAgentId) + " (agent)"
+    for (var i = 0; i < hyprBinds.length; i++) {
+      var b = hyprBinds[i]
+      if (String(b.submap || "") !== "" || b.mouse) continue
+      if (Number(b.modmask) !== mask || String(b.key || "").toUpperCase() !== key) continue
+      var desc = String(b.description || b.dispatcher || "another action")
+      if (desc === own) continue
+      return desc
+    }
+    return ""
+  }
+
+  // Qt key -> the xkb name Hyprland binds. Shifted digits map back to their
+  // digit so Shift+1 records as 1, not "!".
+  function keyNameFor(event) {
+    var k = event.key
+    if (k >= Qt.Key_A && k <= Qt.Key_Z) return String.fromCharCode(k)
+    if (k >= Qt.Key_0 && k <= Qt.Key_9) return String.fromCharCode(k)
+    if (k >= Qt.Key_F1 && k <= Qt.Key_F24) return "F" + (k - Qt.Key_F1 + 1)
+    var names = {}
+    names[Qt.Key_Exclam] = "1"; names[Qt.Key_At] = "2"; names[Qt.Key_NumberSign] = "3"
+    names[Qt.Key_Dollar] = "4"; names[Qt.Key_Percent] = "5"; names[Qt.Key_AsciiCircum] = "6"
+    names[Qt.Key_Ampersand] = "7"; names[Qt.Key_Asterisk] = "8"; names[Qt.Key_ParenLeft] = "9"
+    names[Qt.Key_ParenRight] = "0"
+    names[Qt.Key_Return] = "RETURN"; names[Qt.Key_Enter] = "RETURN"; names[Qt.Key_Space] = "SPACE"
+    names[Qt.Key_Tab] = "TAB"; names[Qt.Key_Backtab] = "TAB"; names[Qt.Key_Backspace] = "BACKSPACE"
+    names[Qt.Key_Delete] = "DELETE"; names[Qt.Key_Insert] = "INSERT"; names[Qt.Key_Home] = "HOME"
+    names[Qt.Key_End] = "END"; names[Qt.Key_PageUp] = "PRIOR"; names[Qt.Key_PageDown] = "NEXT"
+    names[Qt.Key_Up] = "UP"; names[Qt.Key_Down] = "DOWN"; names[Qt.Key_Left] = "LEFT"
+    names[Qt.Key_Right] = "RIGHT"
+    names[Qt.Key_Minus] = "MINUS"; names[Qt.Key_Underscore] = "MINUS"
+    names[Qt.Key_Equal] = "EQUAL"; names[Qt.Key_Plus] = "EQUAL"
+    names[Qt.Key_Comma] = "COMMA"; names[Qt.Key_Less] = "COMMA"
+    names[Qt.Key_Period] = "PERIOD"; names[Qt.Key_Greater] = "PERIOD"
+    names[Qt.Key_Slash] = "SLASH"; names[Qt.Key_Question] = "SLASH"
+    names[Qt.Key_Backslash] = "BACKSLASH"; names[Qt.Key_Bar] = "BACKSLASH"
+    names[Qt.Key_Semicolon] = "SEMICOLON"; names[Qt.Key_Colon] = "SEMICOLON"
+    names[Qt.Key_Apostrophe] = "APOSTROPHE"; names[Qt.Key_QuoteDbl] = "APOSTROPHE"
+    names[Qt.Key_QuoteLeft] = "GRAVE"; names[Qt.Key_AsciiTilde] = "GRAVE"
+    names[Qt.Key_BracketLeft] = "BRACKETLEFT"; names[Qt.Key_BraceLeft] = "BRACKETLEFT"
+    names[Qt.Key_BracketRight] = "BRACKETRIGHT"; names[Qt.Key_BraceRight] = "BRACKETRIGHT"
+    return names[k] || ""
+  }
+
+  function isModifierKey(k) {
+    return k === Qt.Key_Shift || k === Qt.Key_Control || k === Qt.Key_Alt || k === Qt.Key_AltGr
+      || k === Qt.Key_Meta || k === Qt.Key_Super_L || k === Qt.Key_Super_R
+  }
+
+  function recordKey(event) {
+    if (event.key === Qt.Key_Escape) { endShortcutEdit(); return }
+    var m = event.modifiers
+    var held = (m & (Qt.MetaModifier | Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier)) !== 0
+    if (isModifierKey(event.key)) {
+      // A modifier on its own lights its chip; the combo waits for a key.
+      if (event.key === Qt.Key_Meta || event.key === Qt.Key_Super_L || event.key === Qt.Key_Super_R) modSuper = true
+      if (event.key === Qt.Key_Shift) modShift = true
+      if (event.key === Qt.Key_Control) modCtrl = true
+      if (event.key === Qt.Key_Alt) modAlt = true
+      return
+    }
+    // Enter with nothing held saves a finished combo instead of recording it.
+    if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && !held && recordedKey !== "") {
+      saveShortcut()
+      return
+    }
+    var name = keyNameFor(event)
+    if (name === "") { shortcutError = "That key can't be bound. Try a letter, digit, or F-key."; return }
+    shortcutError = ""
+    // Held modifiers replace the chips; a bare key keeps whatever is toggled.
+    if (held) {
+      modSuper = (m & Qt.MetaModifier) !== 0
+      modShift = (m & Qt.ShiftModifier) !== 0
+      modCtrl = (m & Qt.ControlModifier) !== 0
+      modAlt = (m & Qt.AltModifier) !== 0
+    }
+    recordedKey = name
+  }
+
+  function saveShortcut() {
+    if (editingAgentId === "" || pendingCombo === "" || pendingProblem !== "" || shortcutBusy) return
+    runShortcut(["set", editingAgentId, pendingCombo])
+  }
+
+  function clearShortcut() {
+    if (editingAgentId === "" || shortcutBusy) return
+    runShortcut(["clear", editingAgentId])
+  }
+
+  function runShortcut(args) {
+    shortcutBusy = true
+    shortcutError = ""
+    shortcutProc.command = [root.helperScript, "shortcut"].concat(args)
+    shortcutProc.running = true
   }
 
   // ---------------------------------------------------------------- limits
@@ -432,7 +633,7 @@ Panel {
   implicitHeight: button.implicitHeight
 
   onProviderIndexChanged: if (panelFlick) panelFlick.contentY = 0
-  onOpenedChanged: if (opened) {
+  onOpenedChanged: if (!opened) editingAgentId = ""; else {
     cursorActive = false
     nowMs = Date.now()
     // A fresh open clears the manual hold and re-syncs to whatever agent
@@ -488,6 +689,33 @@ Panel {
     stderr: StdioCollector {
       waitForEnd: true
       onStreamFinished: if (text.trim() !== "") console.warn("agents/action", text.trim())
+    }
+  }
+
+  Process {
+    id: shortcutProc
+    running: false
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.shortcutError = text.trim()
+    }
+    onExited: function(code) {
+      root.shortcutBusy = false
+      root.refreshAgentState()
+      if (code === 0) root.endShortcutEdit()
+      else if (root.shortcutError === "") root.shortcutError = "Saving the shortcut failed."
+    }
+  }
+
+  Process {
+    id: bindsProc
+    running: false
+    command: ["hyprctl", "binds", "-j"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try { root.hyprBinds = JSON.parse(String(text || "[]")) } catch (e) { root.hyprBinds = [] }
+      }
     }
   }
 
@@ -552,6 +780,8 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      // The shortcut recorder takes every key while it is open.
+      blocked: root.editingAgentId !== ""
 
       onMoveRequested: function(dx, dy) {
         if (dx !== 0) {
@@ -565,7 +795,10 @@ Panel {
       onActivateRequested: root.refreshNow()
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
-      onTextKey: function(t) { if (t === "r" || t === "R") root.refreshNow() }
+      onTextKey: function(t) {
+        if (t === "r" || t === "R") root.refreshNow()
+        else if (t === "s" || t === "S") root.startShortcutEdit(root.selectedAgentId)
+      }
 
       Flickable {
         id: panelFlick
@@ -611,6 +844,154 @@ Panel {
                   selected: modelData.id === root.selectedAgentId
                   onPicked: root.activateAgent(modelData.id)
                   onDefaultPicked: root.setDefaultAgent(modelData.id)
+                  onShortcutPicked: root.startShortcutEdit(modelData.id)
+                }
+              }
+            }
+
+            // ---------- Shortcut editor for one agent ----------
+            Column {
+              id: shortcutEditor
+              visible: root.editingAgentId !== ""
+              width: parent.width
+              topPadding: Style.space(8)
+              spacing: Style.space(8)
+
+              PanelSectionHeader {
+                width: parent.width
+                text: "SHORTCUT · " + root.agentLabel(root.editingAgentId).toUpperCase()
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              Row {
+                id: modRow
+                width: parent.width
+                spacing: Style.spacing.sm
+                readonly property real cellWidth: (width - spacing * 3) / 4
+
+                Repeater {
+                  model: [
+                    { name: "Super", prop: "modSuper" },
+                    { name: "Shift", prop: "modShift" },
+                    { name: "Ctrl", prop: "modCtrl" },
+                    { name: "Alt", prop: "modAlt" }
+                  ]
+
+                  Button {
+                    required property var modelData
+                    width: modRow.cellWidth
+                    text: modelData.name
+                    selected: root[modelData.prop]
+                    bordered: true
+                    foreground: root.foreground
+                    fontFamily: root.fontFamily
+                    fontSize: Style.font.bodySmall
+                    verticalPadding: Style.spacing.controlPaddingY
+                    onClicked: {
+                      root[modelData.prop] = !root[modelData.prop]
+                      recorder.forceActiveFocus()
+                    }
+                  }
+                }
+              }
+
+              // Takes keys while the editor is open; click it to re-arm after
+              // using the chips.
+              BorderSurface {
+                id: recorderBox
+                width: parent.width
+                implicitHeight: recorderText.implicitHeight + Style.space(20)
+                color: root.alpha(root.foreground, recorder.activeFocus ? 0.10 : 0.04)
+                borderSpec: Border.flat(root.alpha(root.foreground, recorder.activeFocus ? 0.45 : 0.20), 1)
+                radius: Style.cornerRadius
+
+                Item {
+                  id: recorder
+                  anchors.fill: parent
+                  focus: root.editingAgentId !== ""
+                  Keys.onPressed: function(event) {
+                    root.recordKey(event)
+                    event.accepted = true
+                  }
+                }
+
+                Text {
+                  id: recorderText
+                  textFormat: Text.PlainText
+                  anchors.centerIn: parent
+                  text: root.pendingCombo !== ""
+                    ? root.prettyCombo(root.pendingCombo)
+                    : (root.modSuper || root.modShift || root.modCtrl || root.modAlt)
+                      ? root.prettyCombo(root.comboString(root.modSuper, root.modShift, root.modCtrl, root.modAlt, "…"))
+                      : "Press a key…"
+                  color: root.pendingCombo !== "" ? root.foreground : root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.subtitle
+                  font.bold: root.pendingCombo !== ""
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.IBeamCursor
+                  onClicked: recorder.forceActiveFocus()
+                }
+              }
+
+              Text {
+                width: parent.width
+                textFormat: Text.PlainText
+                wrapMode: Text.WordWrap
+                text: root.shortcutError !== "" ? root.shortcutError
+                  : root.pendingProblem !== "" ? root.pendingProblem
+                  : root.pendingConflict !== "" ? "Replaces “" + root.pendingConflict + "”."
+                  : "Hold the modifiers and press a key, or toggle modifiers and press just the key. Enter saves, Esc cancels."
+                color: root.shortcutError !== "" || root.pendingProblem !== "" ? root.urgent : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Row {
+                id: actionRow
+                width: parent.width
+                spacing: Style.spacing.sm
+                readonly property bool hasShortcut:
+                  !!root.editingAgentRow && String(root.editingAgentRow.shortcut || "") !== ""
+                readonly property real cellWidth: (width - spacing * (hasShortcut ? 2 : 1)) / (hasShortcut ? 3 : 2)
+
+                Button {
+                  width: actionRow.cellWidth
+                  text: root.shortcutBusy ? "Saving…" : "Save"
+                  selected: root.pendingCombo !== "" && root.pendingProblem === ""
+                  bordered: true
+                  foreground: root.pendingCombo !== "" && root.pendingProblem === "" ? root.foreground : root.dim
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.bodySmall
+                  verticalPadding: Style.spacing.controlPaddingY
+                  onClicked: root.saveShortcut()
+                }
+
+                Button {
+                  visible: actionRow.hasShortcut
+                  width: actionRow.cellWidth
+                  text: "Remove"
+                  bordered: true
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.bodySmall
+                  verticalPadding: Style.spacing.controlPaddingY
+                  onClicked: root.clearShortcut()
+                }
+
+                Button {
+                  width: actionRow.cellWidth
+                  text: "Cancel"
+                  bordered: true
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.bodySmall
+                  verticalPadding: Style.spacing.controlPaddingY
+                  onClicked: root.endShortcutEdit()
                 }
               }
             }
@@ -964,6 +1345,10 @@ Panel {
 
     signal picked()
     signal defaultPicked()
+    signal shortcutPicked()
+
+    readonly property string shortcut: agent ? String(agent.shortcut || "") : ""
+    readonly property bool hovered: rowMouse.containsMouse || chipMouse.containsMouse
 
     implicitHeight: Math.max(rowMark.implicitHeight, rowLabel.implicitHeight, checkBox.height)
       + Style.spacing.sm * 2
@@ -1032,8 +1417,8 @@ Panel {
 
     Item {
       id: rowStatus
-      anchors.right: parent.right
-      anchors.rightMargin: Style.space(12)
+      anchors.right: chip.left
+      anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
       implicitWidth: agentRow.running
         ? dot.width + Style.space(6) + statusText.implicitWidth
@@ -1065,11 +1450,48 @@ Panel {
       }
     }
 
+    // The agent's shortcut, or a "set key" hint while the row is hovered.
+    // Clicking it opens the shortcut editor for this agent.
+    Rectangle {
+      id: chip
+      readonly property bool shown: agentRow.shortcut !== "" || agentRow.hovered
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      width: chipText.implicitWidth + Style.space(12)
+      height: chipText.implicitHeight + Style.space(4)
+      radius: Style.cornerRadius
+      color: chipMouse.containsMouse ? root.alpha(root.foreground, 0.16) : "transparent"
+      border.width: 1
+      border.color: root.alpha(root.foreground, agentRow.shortcut !== "" ? 0.35 : 0.18)
+      opacity: shown ? 1 : 0
+
+      Text {
+        id: chipText
+        anchors.centerIn: parent
+        textFormat: Text.PlainText
+        text: agentRow.shortcut !== "" ? root.prettyCombo(agentRow.shortcut) : "set key"
+        color: agentRow.shortcut !== "" ? root.foreground : root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+    }
+
     MouseArea {
+      id: rowMouse
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: agentRow.picked()
+    }
+
+    MouseArea {
+      id: chipMouse
+      anchors.fill: chip
+      anchors.margins: -Style.space(4)
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: agentRow.shortcutPicked()
     }
 
     // The checkbox is its own target, stacked above the row's MouseArea so a
