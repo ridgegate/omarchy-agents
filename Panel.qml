@@ -45,6 +45,11 @@ Panel {
   }
   property var agentState: ({ "agents": [], "default": "", "focused": "" })
   readonly property var agentRows: agentState.agents || []
+  // The list is trimmed to the agents you have not hidden; Edit shows them
+  // all with a show/hide toggle. Hidden agents keep their shortcuts.
+  property bool editingList: false
+  readonly property var shownAgentRows: agentRows.filter(function(a) { return !a.hidden })
+  readonly property int hiddenCount: agentRows.length - shownAgentRows.length
   property int agentRevision: 0
   property string defaultAgentId: ""
   property string focusedAgentId: ""
@@ -224,8 +229,19 @@ Panel {
     if (root.opened && !manualPick) focusAgent(id)
   }
 
-  function startShortcutEdit(id) {
+  function toggleEditList() {
+    editingList = !editingList
+    if (editingList) editingAgentId = ""
+  }
+
+  function setAgentHidden(id, hide) {
     if (id === "") return
+    hiddenProc.command = [root.helperScript, hide ? "hide" : "show", id]
+    if (!hiddenProc.running) hiddenProc.running = true
+  }
+
+  function startShortcutEdit(id) {
+    if (id === "" || editingList) return
     var current = ""
     for (var i = 0; i < agentRows.length; i++)
       if (agentRows[i].id === id) current = String(agentRows[i].shortcut || "")
@@ -633,7 +649,7 @@ Panel {
   implicitHeight: button.implicitHeight
 
   onProviderIndexChanged: if (panelFlick) panelFlick.contentY = 0
-  onOpenedChanged: if (!opened) editingAgentId = ""; else {
+  onOpenedChanged: if (!opened) { editingAgentId = ""; editingList = false } else {
     cursorActive = false
     nowMs = Date.now()
     // A fresh open clears the manual hold and re-syncs to whatever agent
@@ -705,6 +721,16 @@ Panel {
       if (code === 0) root.endShortcutEdit()
       else if (root.shortcutError === "") root.shortcutError = "Saving the shortcut failed."
     }
+  }
+
+  Process {
+    id: hiddenProc
+    running: false
+    stderr: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: if (text.trim() !== "") console.warn("agents/hidden", text.trim())
+    }
+    onExited: root.refreshAgentState()
   }
 
   Process {
@@ -798,6 +824,7 @@ Panel {
       onTextKey: function(t) {
         if (t === "r" || t === "R") root.refreshNow()
         else if (t === "s" || t === "S") root.startShortcutEdit(root.selectedAgentId)
+        else if (t === "e" || t === "E") root.toggleEditList()
       }
 
       Flickable {
@@ -823,11 +850,54 @@ Panel {
             width: parent.width
             spacing: Style.space(4)
 
-            PanelSectionHeader {
+            Item {
               width: parent.width
-              text: "AGENT"
-              foreground: root.foreground
-              fontFamily: root.fontFamily
+              implicitHeight: Math.max(agentHeader.implicitHeight, editLink.implicitHeight)
+
+              PanelSectionHeader {
+                id: agentHeader
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: root.editingList ? "AGENT · SHOW OR HIDE" : "AGENT"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              Text {
+                id: editLink
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: root.editingList ? "Done"
+                  : root.hiddenCount > 0 ? root.hiddenCount + " hidden · Edit" : "Edit"
+                color: editMouse.containsMouse || root.editingList ? root.foreground : root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: root.editingList
+
+                MouseArea {
+                  id: editMouse
+                  anchors.fill: parent
+                  anchors.margins: -Style.space(4)
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.toggleEditList()
+                }
+              }
+            }
+
+            Text {
+              visible: !root.editingList && root.shownAgentRows.length === 0
+              width: parent.width
+              topPadding: Style.space(6)
+              bottomPadding: Style.space(6)
+              textFormat: Text.PlainText
+              text: "Every agent is hidden. Click Edit to show some."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
             }
 
             Column {
@@ -835,14 +905,17 @@ Panel {
               spacing: Style.space(2)
 
               Repeater {
-                model: root.agentRows
+                model: root.editingList ? root.agentRows : root.shownAgentRows
 
                 AgentRow {
                   required property var modelData
                   width: agentSection.width
                   agent: modelData
                   selected: modelData.id === root.selectedAgentId
-                  onPicked: root.activateAgent(modelData.id)
+                  managing: root.editingList
+                  onPicked: root.editingList
+                    ? root.setAgentHidden(modelData.id, !modelData.hidden)
+                    : root.activateAgent(modelData.id)
                   onDefaultPicked: root.setDefaultAgent(modelData.id)
                   onShortcutPicked: root.startShortcutEdit(modelData.id)
                 }
@@ -1347,6 +1420,11 @@ Panel {
     signal defaultPicked()
     signal shortcutPicked()
 
+    // In Edit mode the row is a show/hide toggle: the eye replaces the
+    // shortcut chip, and the default checkbox stands down.
+    property bool managing: false
+    readonly property bool isHidden: agent ? agent.hidden === true : false
+
     readonly property string shortcut: agent ? String(agent.shortcut || "") : ""
     readonly property bool hovered: rowMouse.containsMouse || chipMouse.containsMouse
 
@@ -1364,6 +1442,7 @@ Panel {
     // Filled when this agent is the default.
     Rectangle {
       id: checkBox
+      opacity: agentRow.managing ? 0.3 : 1
       anchors.left: parent.left
       anchors.leftMargin: Style.space(10)
       anchors.verticalCenter: parent.verticalCenter
@@ -1387,6 +1466,7 @@ Panel {
 
     Text {
       id: rowMark
+      opacity: agentRow.isHidden ? 0.45 : 1
       textFormat: Text.PlainText
       text: agentRow.agent ? agentRow.agent.icon : ""
       color: agentRow.selected || agentRow.focused ? root.foreground : root.dim
@@ -1401,6 +1481,7 @@ Panel {
 
     Text {
       id: rowLabel
+      opacity: agentRow.isHidden ? 0.45 : 1
       textFormat: Text.PlainText
       text: agentRow.agent ? agentRow.agent.label : ""
       color: agentRow.selected ? root.foreground : root.dim
@@ -1417,7 +1498,7 @@ Panel {
 
     Item {
       id: rowStatus
-      anchors.right: chip.left
+      anchors.right: agentRow.managing ? eye.left : chip.left
       anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
       implicitWidth: agentRow.running
@@ -1454,7 +1535,7 @@ Panel {
     // Clicking it opens the shortcut editor for this agent.
     Rectangle {
       id: chip
-      readonly property bool shown: agentRow.shortcut !== "" || agentRow.hovered
+      readonly property bool shown: !agentRow.managing && (agentRow.shortcut !== "" || agentRow.hovered)
       anchors.right: parent.right
       anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
@@ -1477,6 +1558,20 @@ Panel {
       }
     }
 
+    // Shown/hidden state while editing the list.
+    Text {
+      id: eye
+      visible: agentRow.managing
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(12)
+      anchors.verticalCenter: parent.verticalCenter
+      textFormat: Text.PlainText
+      text: agentRow.isHidden ? "󰈉  Hidden" : "󰈈  Shown"
+      color: agentRow.isHidden ? root.dim : root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+
     MouseArea {
       id: rowMouse
       anchors.fill: parent
@@ -1489,6 +1584,7 @@ Panel {
       id: chipMouse
       anchors.fill: chip
       anchors.margins: -Style.space(4)
+      enabled: !agentRow.managing
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: agentRow.shortcutPicked()
@@ -1502,6 +1598,7 @@ Panel {
       anchors.verticalCenter: parent.verticalCenter
       width: checkBox.width + Style.space(12)
       height: parent.height
+      enabled: !agentRow.managing
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
       onClicked: agentRow.defaultPicked()

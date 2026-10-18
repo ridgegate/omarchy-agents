@@ -20,6 +20,10 @@ is upstream work; this fork layers an **agent picker and launcher** on top.
   and Enter. The panel warns when the combo is already bound and takes it over
   from the existing binding. A shortcut opens or switches to the agent exactly
   like a row click.
+- **Show or hide agents** — click **Edit** in the agent header (or press `e`)
+  to list every installed agent with a show/hide toggle, so the menu holds only
+  the agents you use. Hidden agents keep their shortcuts. The list is stored in
+  `~/.config/omarchy/agents-hidden.json`.
 - **Starts where you work** — a new agent terminal opens in the focused
   terminal's directory (or `~/Work` when that is `$HOME`).
 - **Default agent** — the checkbox on a row writes your default
@@ -97,7 +101,8 @@ added children.
 - Bar icon **middle click** — switch to the next subscription.
 - In the panel: click an **agent row** to open or switch to its terminal, click
   its **checkbox** to make it the default, click its **shortcut chip** (or `s` on
-  the selected row) to assign a keyboard shortcut, `h`/`l` to switch subscription,
+  the selected row) to assign a keyboard shortcut, click **Edit** (or `e`) to
+  show or hide agents, `h`/`l` to switch subscription,
   `j`/`k` to scroll, `r`/Enter to refresh, Tab to the neighboring panel, Esc to
   close.
 - IPC: `omarchy-shell omarchy.agents toggle` (also `open`, `close`, `refresh`).

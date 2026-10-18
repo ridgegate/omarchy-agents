@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "agentselector.agents",
   "name": "Agents",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "ridgegate",
   "license": "MIT",
   "description": "Launch installed coding agents with a click or a keyboard shortcut, and read their usage, limits, and pace in a native Omarchy bar panel.",

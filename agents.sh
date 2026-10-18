@@ -10,6 +10,8 @@
 #   agents.sh focus ID   -> focus ID's terminal if it is open (fails if not)
 #   agents.sh launch ID  -> open ID in a new Omarchy agent terminal
 #   agents.sh activate ID -> focus ID's terminal if open, else launch it
+#   agents.sh hide ID    -> leave ID out of the panel's agent list
+#   agents.sh show ID    -> put ID back in the list
 #   agents.sh shortcut set ID COMBO -> bind COMBO (e.g. "SUPER + SHIFT + A") to
 #                        activate ID; a combo belongs to one agent at a time
 #   agents.sh shortcut clear ID     -> drop ID's shortcut
@@ -31,6 +33,9 @@ KNOWN_AGENTS=(pi omp opencode claude codex crush grok gemini agy openclaw hermes
 shortcuts_path="$HOME/.config/omarchy/agent-shortcuts.json"
 shortcuts_lua="$HOME/.config/hypr/agent-shortcuts.lua"
 hypr_bindings="$HOME/.config/hypr/bindings.lua"
+# Agents left out of the panel's list, as a JSON array of ids. Hiding only
+# tidies the menu: a hidden agent keeps its shortcut and still launches.
+hidden_path="$HOME/.config/omarchy/agents-hidden.json"
 
 # id -> Hyprland window address for agents that currently have a terminal open.
 declare -A ID_ADDR=()
@@ -210,6 +215,22 @@ shortcuts() {
   printf '%s\n' "$s"
 }
 
+hidden() {
+  local h
+  h=$(cat "$hidden_path" 2>/dev/null) || h='[]'
+  jq -e 'type == "array"' <<<"$h" >/dev/null 2>&1 || h='[]'
+  printf '%s\n' "$h"
+}
+
+set_hidden() {
+  local id=$1 hide=$2 next
+  [[ -n $id ]] || { echo "needs an agent id" >&2; exit 1; }
+  next=$(hidden | jq -c --arg id "$id" --argjson hide "$hide" \
+    'map(select(. != $id)) + (if $hide then [$id] else [] end)')
+  mkdir -p "$(dirname "$hidden_path")"
+  printf '%s\n' "$next" >"$hidden_path"
+}
+
 lua_quote() {
   local v=${1//\\/\\\\}
   printf '"%s"' "${v//\"/\\\"}"
@@ -320,6 +341,7 @@ build_state() {
     --argjson installed "$installed_json" \
     --argjson open "$open_json" \
     --argjson shortcuts "$(shortcuts)" \
+    --argjson hidden "$(hidden)" \
     '
     {
       default: $default,
@@ -336,7 +358,8 @@ build_state() {
             isDefault: ($m.id == $default),
             running: (($open | index($m.id)) != null),
             focused: ($m.id == $focused),
-            shortcut: ($shortcuts[$m.id] // "")
+            shortcut: ($shortcuts[$m.id] // ""),
+            hidden: (($hidden | index($m.id)) != null)
           }
       ]
     }'
@@ -374,8 +397,10 @@ shortcut)
   shift
   shortcut_cmd "$@"
   ;;
+hide) set_hidden "${2:-}" true ;;
+show) set_hidden "${2:-}" false ;;
 *)
-  echo "usage: agents.sh <state|list|active|set ID|focus ID|launch ID|activate ID|shortcut ...>" >&2
+  echo "usage: agents.sh <state|list|active|set ID|focus ID|launch ID|activate ID|hide ID|show ID|shortcut ...>" >&2
   exit 1
   ;;
 esac
