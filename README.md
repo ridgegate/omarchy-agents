@@ -10,7 +10,7 @@ is upstream work; this fork layers an **agent picker and launcher** on top.
 
 <img width="468" height="678" alt="screenshot-2026-10-21_13-07-55" src="https://github.com/user-attachments/assets/531cc1f0-9145-4540-bb59-6b7df17d89c3" />
 <img width="537" height="472" alt="screenshot-2026-10-21_13-19-04" src="https://github.com/user-attachments/assets/b3d364bb-2a8a-47ac-8d9e-252ca9187268" />
-
+<img width="467" height="282" alt="screenshot-2026-10-21_13-21-15" src="https://github.com/user-attachments/assets/a2d324ae-d3f2-46c7-b09d-ab4d1b1a6c3d" />
 
 ## Features
 
