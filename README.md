@@ -8,6 +8,9 @@ each subscription's usage — all from a single bar icon.
 It is a fork of Omarchy's built-in `omarchy.agents` widget. The usage dashboard
 is upstream work; this fork layers an **agent picker and launcher** on top.
 
+<img width="468" height="678" alt="screenshot-2026-10-21_13-07-55" src="https://github.com/user-attachments/assets/531cc1f0-9145-4540-bb59-6b7df17d89c3" />
+
+
 ## Features
 
 - **Agent picker** — one row per installed agent, with its own mark and an
